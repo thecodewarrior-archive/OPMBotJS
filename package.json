@@ -1,0 +1,35 @@
+{
+  "name": "opmbot",
+  "version": "1.0.0",
+  "description": "Bot for One Punch Mods",
+  "main": "start.js",
+  "scripts": {
+    "start": "npm run build:live",
+    "build:live": "nodemon --exec ./node_modules/.bin/ts-node -- ./app/start.ts"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/thecodewarrior/OPMBotJS.git"
+  },
+  "keywords": [
+    "discord",
+    "bot",
+    "kotlin",
+    "onepunchmods"
+  ],
+  "author": "TeamWizardry",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/thecodewarrior/OPMBotJS/issues"
+  },
+  "homepage": "https://github.com/thecodewarrior/OPMBotJS#readme",
+  "dependencies": {
+    "@types/node": "^7.0.18",
+    "discord.js": "^11.1.0"
+  },
+  "devDependencies": {
+    "nodemon": "^1.11.0",
+    "ts-node": "^3.0.4",
+    "typescript": "^2.3.2"
+  }
+}

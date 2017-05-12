@@ -5,9 +5,6 @@ import * as discord from "discord.js";
 console.log("Starting...");
 var client = new discord.Client();
 
-var token = fs.readFileSync(path.join(__dirname, "token.txt")).toString();
-
-
 client.on("ready", () => {
 	console.log("ready");
 })
@@ -22,4 +19,5 @@ client.on('message', (message) => {
 });
 
 console.log("Logging In...");
-client.login("MzEyNjM0MzgyODUyNTU0NzUy.C_d7BQ.UFxjSyErznNBDYa3pJ-NXAv8dBI");
+var token = fs.readFileSync(path.join(__dirname, "token.txt")).toString();
+client.login(token);

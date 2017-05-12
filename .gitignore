@@ -1,2 +1,3 @@
 app/token.txt
 node_modules/
+.*.sw?

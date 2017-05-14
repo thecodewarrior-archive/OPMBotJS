@@ -1,23 +1,29 @@
 import * as fs from "fs";
 import * as path from "path";
 import * as discord from "discord.js";
+import * as tsc from "typescript-compiler";
 
 console.log("Starting...");
 var client = new discord.Client();
 
-client.on("ready", () => {
-	console.log("ready");
-})
+var modules: { [index: string]: BotModule; } = {};
 
-client.on('message', (message) => {
-	// If the message is "ping"
-	console.log("message: `" + message.content + "`");
-	if (message.content === 'ping') {
-		// Send "pong" to the same channel
-		message.channel.send('pong');
+function ready() {
+	modules
+}
+
+client.emit = function(event: string | symbol, ...args: any) {
+	if(emitArgs[0] === "ready") {
+		ready();
 	}
-});
+
+	for (var key in modules) {
+		var value = modules[key];
+		value.emit(event, ...args);
+	}
+};
 
 console.log("Logging In...");
-var token = fs.readFileSync(path.join(__dirname, "token.txt")).toString();
+var token = fs.readFileSync(path.join(__dirname, "token.txt"), 'utf8').toString().trim();
+console.log("`" + token + "`");
 client.login(token);

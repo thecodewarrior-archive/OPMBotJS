@@ -1,4 +1,7 @@
 {
   "name": "opmbot",
-  "dependencies": {}
+  "dependencies": {},
+  "globalDependencies": {
+    "firstline": "file:typings/custom/firstline.d.ts"
+  }
 }

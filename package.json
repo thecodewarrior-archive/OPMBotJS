@@ -26,7 +26,12 @@
   "dependencies": {
     "@types/node": "^7.0.18",
     "discord.js": "^11.1.0",
+    "firstline": "^1.2.1",
     "node-watch": "^0.5.4",
+    "promise": "^7.1.1",
+    "recursive-readdir": "^2.1.1",
+    "ts-node": "^3.0.4",
+    "typescript": "^2.3.2",
     "typescript-compiler": "^1.4.1-2"
   },
   "devDependencies": {

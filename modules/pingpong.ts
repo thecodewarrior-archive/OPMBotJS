@@ -1,4 +1,4 @@
-//notmodule
+//module
 import { BotModule, command } from '../app/module';
 import { Message } from 'discord.js';
 import { ParsedArgs } from 'minimist';
@@ -13,7 +13,7 @@ export class PingPong extends BotModule {
         }
     }
 
-    @command({ names: ["doPing", "dp"], flags: ["a", "b", "flag"] })
+    @command({ names: ["$doPing", "$dp"], flags: ["a", "b", "flag"] })
     doPing(message: Message, args: ParsedArgs) {
         message.channel.sendCode("json", JSON.stringify(args))
     }

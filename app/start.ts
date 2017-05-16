@@ -4,8 +4,9 @@ import * as discord from "discord.js";
 
 import { BotModule } from './module';
 import { Channel, ClientUserSettings, Emoji, Guild, User, GuildMember, Collection, Snowflake, Message, MessageReaction, Role, UserResolvable } from 'discord.js';
+
 let recursiveReaddir: (path: string, ignore: Array<string | ( (file: string, stats: fs.Stats) => boolean )>, fun: (err: any, files: string[]) => void) => void = require('recursive-readdir')
-require('ts-node').register()
+require('ts-node').register({ fast: true })
 
 console.log("Starting...");
 var client = new discord.Client();
@@ -84,16 +85,25 @@ client.on('guildDelete', (guild: Guild) => {
 	}
 });
 client.on('guildMemberAdd', (member: GuildMember) => {
+	if(member.id === client.user.id) {
+		return;
+	}
 	for(var m in modules) {
 		modules[m].onGuildMemberAdd(member);
 	}
 });
 client.on('guildMemberAvailable', (member: GuildMember) => {
+	if(member.id === client.user.id) {
+		return;
+	}
 	for(var m in modules) {
 		modules[m].onGuildMemberAvailable(member);
 	}
 });
 client.on('guildMemberRemove', (member: GuildMember) => {
+	if(member.id === client.user.id) {
+		return;
+	}
 	for(var m in modules) {
 		modules[m].onGuildMemberRemove(member);
 	}
@@ -104,6 +114,9 @@ client.on('guildMembersChunk', (members: Collection<Snowflake, GuildMember>, gui
 	}
 });
 client.on('guildMemberSpeaking', (member: GuildMember, speaking: boolean) => {
+	if(member.id === client.user.id) {
+		return;
+	}
 	for(var m in modules) {
 		modules[m].onGuildMemberSpeaking(member, speaking);
 	}
@@ -124,11 +137,17 @@ client.on('guildUpdate', (oldGuild: Guild, newGuild: Guild) => {
 	}
 });
 client.on('message', (message: Message) => {
+	if(message.member.id === client.user.id) {
+		return;
+	}
 	for(var m in modules) {
-		modules[m].onMessage(message);
+		modules[m]._onMessage(message);
 	}
 });
 client.on('messageDelete', (message: Message) => {
+	if(message.member.id === client.user.id) {
+		return;
+	}
 	for(var m in modules) {
 		modules[m].onMessageDelete(message);
 	}
@@ -139,26 +158,41 @@ client.on('messageDeleteBulk', (messages: Collection<Snowflake, Message>) => {
 	}
 });
 client.on('messageReactionAdd', (messageReaction: MessageReaction, user: User) => {
+	if(user.id === client.user.id) {
+		return;
+	}
 	for(var m in modules) {
 		modules[m].onMessageReactionAdd(messageReaction, user);
 	}
 });
 client.on('messageReactionRemove', (messageReaction: MessageReaction, user: User) => {
+	if(user.id === client.user.id) {
+		return;
+	}
 	for(var m in modules) {
 		modules[m].onMessageReactionRemove(messageReaction, user);
 	}
 });
 client.on('messageReactionRemoveAll', (message: Message) => {
+	if(message.member.id === client.user.id) {
+		return;
+	}
 	for(var m in modules) {
 		modules[m].onMessageReactionRemoveAll(message);
 	}
 });
 client.on('messageUpdate', (oldMessage: Message, newMessage: Message) => {
+	if(oldMessage.member.id === client.user.id) {
+		return;
+	}
 	for(var m in modules) {
 		modules[m].onMessageUpdate(oldMessage, newMessage);
 	}
 });
 client.on('presenceUpdate', (oldMember: GuildMember, newMember: GuildMember) => {
+	if(oldMember.id === client.user.id) {
+		return;
+	}
 	for(var m in modules) {
 		modules[m].onPresenceUpdate(oldMember, newMember);
 	}
@@ -189,11 +223,17 @@ client.on('roleUpdate', (oldRole: Role, newRole: Role) => {
 	}
 });
 client.on('typingStart', (channel: Channel, user: User) => {
+	if(user.id === client.user.id) {
+		return;
+	}
 	for(var m in modules) {
 		modules[m].onTypingStart(channel, user);
 	}
 });
 client.on('typingStop', (channel: Channel, user: User) => {
+	if(user.id === client.user.id) {
+		return;
+	}
 	for(var m in modules) {
 		modules[m].onTypingStop(channel, user);
 	}
@@ -204,11 +244,17 @@ client.on('userNoteUpdate', (user: UserResolvable, oldNote: string, newNote: str
 	}
 });
 client.on('userUpdate', (oldUser: User, newUser: User) => {
+	if(oldUser.id === client.user.id) {
+		return;
+	}
 	for(var m in modules) {
 		modules[m].onUserUpdate(oldUser, newUser);
 	}
 });
 client.on('voiceStateUpdate', (oldMember: GuildMember, newMember: GuildMember) => {
+	if(oldMember.id === client.user.id) {
+		return;
+	}
 	for(var m in modules) {
 		modules[m].onVoiceStateUpdate(oldMember, newMember);
 	}
@@ -219,20 +265,31 @@ client.on('warn', (info: string) => {
 	}
 });
 //#endregion
+
+function loadModule(file: string) {
+	console.log("Loading module `" + file + "`")
+	let exports: any = require(file);
+	for (var k in exports) {
+		var botmodule = new exports[k](client);
+
+		let existing = modules[file];
+		modules[file] = botmodule;
+		if (existing !== undefined) {
+			botmodule.transfer(existing)
+		}
+	}
+}
+
 function ignoreFileFunction(file: string, stats: fs.Stats): boolean {
 	let check = "//module"
 	return fs.readFileSync(file, 'utf8').toString().substr(0, check.length) !== check;
 }
+
 client.on('ready', () => {
 	recursiveReaddir(path.join(__dirname, "modules"), [ignoreFileFunction], (err: any, files: string[]) => {
-		for(var file in files) {
-			console.log("Loading module `" + file + "`")
-			let botmodule: BotModule = require(file);
-			let existing = modules[file];
-			modules[file] = botmodule;
-			if(existing !== undefined) {
-				botmodule.transfer(existing)
-			}
+		for(var i in files) {
+			var file = files[i]
+			loadModule(file)
 		}
 	})
 });

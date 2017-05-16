@@ -6,7 +6,7 @@ import { BotModule } from './module';
 import { Channel, ClientUserSettings, Emoji, Guild, User, GuildMember, Collection, Snowflake, Message, MessageReaction, Role, UserResolvable } from 'discord.js';
 
 let recursiveReaddir: (path: string, ignore: Array<string | ( (file: string, stats: fs.Stats) => boolean )>, fun: (err: any, files: string[]) => void) => void = require('recursive-readdir')
-require('ts-node').register({ fast: true })
+require('ts-node').register({ project: path.join(__dirname, ".."), cache: false })
 
 console.log("Starting...");
 var client = new discord.Client();
@@ -280,16 +280,16 @@ function loadModule(file: string) {
 	}
 }
 
-function ignoreFileFunction(file: string, stats: fs.Stats): boolean {
-	let check = "//module"
-	return fs.readFileSync(file, 'utf8').toString().substr(0, check.length) !== check;
-}
-
 client.on('ready', () => {
-	recursiveReaddir(path.join(__dirname, "modules"), [ignoreFileFunction], (err: any, files: string[]) => {
+	let check = "//module"
+	recursiveReaddir(path.join(__dirname, "../modules"), [], (err: any, files: string[]) => {
 		for(var i in files) {
-			var file = files[i]
-			loadModule(file)
+			let file = files[i]
+			let firstbit = fs.readFileSync(file, 'utf8').toString().substr(0, check.length) 
+			if(firstbit === check) {
+				console.log(firstbit + " === " + check)
+				loadModule(file)
+			}
 		}
 	})
 });

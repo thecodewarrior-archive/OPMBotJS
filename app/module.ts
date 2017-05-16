@@ -57,6 +57,9 @@ export class BotModule {
 
 	private commands: { [key: string] : { method: string, flags: string[] } }
 	
+	protected parseValue(message: Message, v: string): any { return v }
+
+	/** DO NOT OVERRIDE */
 	_addCommand(names: string[], key: { method: string, flags: string[] }, parameters: Function[]) {
 		if(this.commands == undefined) this.commands = {}
 		if(parameters[0] !== Message) {
@@ -70,21 +73,65 @@ export class BotModule {
 		}
 	}
 
+	/** DO NOT OVERRIDE */
 	_onMessage(message: Message) {
 		let PREFIX = "$"
 		if(!(message.content.length > 0 && message.content.substr(0, PREFIX.length) === PREFIX)) {
 			this.onMessage(message)
 			return
 		}
-		let text = message.cleanContent.split(/\s+/)[0].substr(PREFIX.length) // first word, sans prefix
-		console.log("command: `" + text + "`")
-		if(this.commands[text] !== undefined) {
-			let args = minimist(message.content.split(/\s+/).slice(1), {boolean: this.commands[text].flags});
-			(this as any)[this.commands[text].method](message, args)
+		let sansPrefix = message.content.substr(PREFIX.length)
+		let _split = sansPrefix.match(/(?:[^\s"]+|"[^"]*")+/g)
+		let split = (_split == null ? [] : _split)
+		let commandName = split.length == 0 ? "" : split[0]
+		console.log("command: `" + commandName + "`")
+		if(this.commands[commandName] !== undefined) {
+			let _args = minimist(split.slice(1), {boolean: this.commands[commandName].flags});
+			let args = new CommandParameters();
+
+			for(var k in _args) {
+				let v = _args[k]
+				if(k === "_") {
+					for(var i in v) {
+						args._.push(this._parseValue(message, v[i]))
+					}
+				} else {
+					args[k] = this._parseValue(message, v)
+				}
+			}
+
+			(this as any)[this.commands[commandName].method](message, args)
 		} else {
 			this.onMessage(message)
 		}
 	}
+
+	/** DO NOT OVERRIDE */
+	protected _parseValue(message: Message, v: string): any {
+		/*
+		let match = v.match(/^"(.*)"$/)
+		if(match !== null) {
+			return match[0]
+		}
+		match = v.match(/^<@(\d{18})>$/)
+		if(match !== null) {
+			return this.client.fetchUser(match[0])
+		}
+		match = v.match(/^<#(\d{18})>$/)
+		if(match !== null) {
+			return message.guild.channels.get(v[0])
+		}
+		match = v.match(/^<:(\w{2,}):(\d{18})>$/)
+		if(match !== null) {
+		}
+		/**/
+		return this.parseValue(message, v)
+	}
+}
+
+export class CommandParameters {
+	[key: string] : any
+	_: any[] = []
 }
 
 export function command(info: { names: string[], flags: string[] }) {

@@ -1,5 +1,5 @@
-//module
-import { BotModule, command } from '../module';
+//notmodule
+import { BotModule, command } from '../app/module';
 import { Message } from 'discord.js';
 import { ParsedArgs } from 'minimist';
 

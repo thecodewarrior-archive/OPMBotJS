@@ -6,7 +6,6 @@ import { BotModule } from './module';
 import { Channel, ClientUserSettings, Emoji, Guild, User, GuildMember, Collection, Snowflake, Message, MessageReaction, Role, UserResolvable } from 'discord.js';
 
 let recursiveReaddir: (path: string, ignore: Array<string | ( (file: string, stats: fs.Stats) => boolean )>, fun: (err: any, files: string[]) => void) => void = require('recursive-readdir')
-require('ts-node').register({ project: path.join(__dirname, ".."), cache: false, fast: true})
 
 console.log("Starting...");
 var client = new discord.Client();
@@ -149,12 +148,12 @@ client.on('messageDelete', (message: Message) => {
 		return;
 	}
 	for(var m in modules) {
-		modules[m].onMessageDelete(message);
+		modules[m]._onMessageDelete(message);
 	}
 });
 client.on('messageDeleteBulk', (messages: Collection<Snowflake, Message>) => {
 	for(var m in modules) {
-		modules[m].onMessageDeleteBulk(messages);
+		modules[m]._onMessageDeleteBulk(messages);
 	}
 });
 client.on('messageReactionAdd', (messageReaction: MessageReaction, user: User) => {
@@ -162,7 +161,7 @@ client.on('messageReactionAdd', (messageReaction: MessageReaction, user: User) =
 		return;
 	}
 	for(var m in modules) {
-		modules[m].onMessageReactionAdd(messageReaction, user);
+		modules[m]._onMessageReactionAdd(messageReaction, user);
 	}
 });
 client.on('messageReactionRemove', (messageReaction: MessageReaction, user: User) => {
@@ -170,7 +169,7 @@ client.on('messageReactionRemove', (messageReaction: MessageReaction, user: User
 		return;
 	}
 	for(var m in modules) {
-		modules[m].onMessageReactionRemove(messageReaction, user);
+		modules[m]._onMessageReactionRemove(messageReaction, user);
 	}
 });
 client.on('messageReactionRemoveAll', (message: Message) => {
@@ -178,7 +177,7 @@ client.on('messageReactionRemoveAll', (message: Message) => {
 		return;
 	}
 	for(var m in modules) {
-		modules[m].onMessageReactionRemoveAll(message);
+		modules[m]._onMessageReactionRemoveAll(message);
 	}
 });
 client.on('messageUpdate', (oldMessage: Message, newMessage: Message) => {
@@ -186,7 +185,7 @@ client.on('messageUpdate', (oldMessage: Message, newMessage: Message) => {
 		return;
 	}
 	for(var m in modules) {
-		modules[m].onMessageUpdate(oldMessage, newMessage);
+		modules[m]._onMessageUpdate(oldMessage, newMessage);
 	}
 });
 client.on('presenceUpdate', (oldMember: GuildMember, newMember: GuildMember) => {
@@ -266,8 +265,55 @@ client.on('warn', (info: string) => {
 });
 //#endregion
 
+// from `http://stackoverflow.com/questions/9210542/node-js-require-cache-possible-to-invalidate/14801711#14801711`
+/**
+ * Removes a module from the cache
+ */
+function purgeCache(moduleName: string) {
+    // Traverse the cache looking for the files
+    // loaded by the specified module name
+    searchCache(moduleName, (mod) => {
+        delete require.cache[mod.id];
+    });
+
+    // Remove cached paths to the module.
+    // Thanks to @bentael for pointing this out.
+    Object.keys((module.constructor as any)._pathCache).forEach(function(cacheKey) {
+        if (cacheKey.indexOf(moduleName)>0) {
+            delete (module.constructor as any)._pathCache[cacheKey];
+        }
+    });
+};
+
+/**
+ * Traverses the cache to search for all the cached
+ * files of the specified module name
+ */
+function searchCache(moduleName: string, callback: (child: any) => void) {
+    // Resolve the module identified by the specified name
+    var mod: any = require.resolve(moduleName);
+
+    // Check if the module has been resolved and found within
+    // the cache
+    if (mod && ((mod = require.cache[mod]) !== undefined)) {
+        // Recursively go over the results
+        (function traverse(mod) {
+            // Go over each of the module's children and
+            // traverse them
+            mod.children.forEach((child: any) => {
+                traverse(child);
+            });
+
+            // Call the specified callback providing the
+            // found cached module
+            callback(mod);
+        }(mod));
+    }
+};
+
 function loadModule(file: string) {
 	console.log("Loading module `" + file + "`")
+	purgeCache(file)
 	let exports: any = require(file);
 	for (var k in exports) {
 		var botmodule = new exports[k](client);

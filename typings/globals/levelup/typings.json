@@ -1,0 +1,8 @@
+{
+  "resolution": "main",
+  "tree": {
+    "src": "https://raw.githubusercontent.com/DefinitelyTyped/DefinitelyTyped/2f152b4a86c1c30c0f20dd276d96453731fb7843/levelup/index.d.ts",
+    "raw": "registry:dt/levelup#0.0.0+20161201011304",
+    "typings": "https://raw.githubusercontent.com/DefinitelyTyped/DefinitelyTyped/2f152b4a86c1c30c0f20dd276d96453731fb7843/levelup/index.d.ts"
+  }
+}

@@ -9,12 +9,13 @@ const PATTERN = /https?:\/\/imgur.com\/(?:\w+\/)+([A-Za-z0-9]{5})/
 
 export class AlbumExpand extends BotModule {
     @command({
-        names: ["$expandAlbum", "$ea"], flags: [], help: [
+        names: ["expandAlbum", "ea"], flags: [], help: [
             "NAME",
             "    expandAlbum - Expand an album",
             "",
             "SYNOPSIS",
-            "    $expandAlbum [link]",
+            "    %expandAlbum [link]",
+            "    %ea [link]",
         ]
     })
     doCommand(message: Message, args: ParsedArgs) {

@@ -26,9 +26,17 @@ export class LawsOfAviation extends BotModule {
         })
     }
 
-    @command({ names: ["!lawsofaviation", "!laws"], help: ["Prints out the paginated script of The Bee Movie"]})
+    @command({ names: ["lawsofaviation", "laws"], help: [
+        "NAME",
+        "    lawsofaviation - Print the laws of aviation... and more",
+        "SYNOPSIS",
+        "    %lawsofaviation [--page=N]",
+        "    %laws [--page=N]",
+        "OPTIONS",
+        "    --page=N",
+        "         start at page N. N is zero-indexed, and defaults to zero"]})
     laws(message: Message, args: ParsedArgs) {
-        let page = parseInt(args._[0]) | 0
+        let page = parseInt(args.page) | 0
         message.channel.send(this.lawPages[page]).then( (sent) => {
             this.track(sent as Message, "pages")
             this.msgData(sent as Message, data => {

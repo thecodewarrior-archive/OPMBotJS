@@ -118,18 +118,23 @@ export class BotModule {
 		}
 	}
 
+	readonly PREFIX_REGEX = /^!(\w+)/
+	readonly PREFIX = "!"
 	/** DO NOT OVERRIDE */
 	_onMessage(message: Message) {
-		let _split = message.content.match(/(?:[^\s"]+|"[^"]*")+/g)
-		let split = (_split == null ? [] : _split)
-		let commandName = split.length == 0 ? "" : split[0]
+		if(this.commands === undefined) this.commands = {}
+		let commandMatch = message.content.match(this.PREFIX_REGEX)
+		const commandName = commandMatch === null ? null : commandMatch[1]
 
-		if(this.commands[commandName] !== undefined) {
+		if(commandName !== null && this.commands[commandName] !== undefined) {
+			let _split = message.content.substr(commandMatch!![0].length).match(/(?:[^\s"]+|"[^"]*")+/g)
+			let split = (_split == null ? [] : _split)
+
 			if((message.channel instanceof DMChannel || message.channel instanceof GroupDMChannel) && !this.commands[commandName].dm) {
 				message.channel.send(`I'm sorry, \`${commandName}\` does not seem to work in dms.\n\nIf you would like this feature in particular please contact @thecodewarrior#6629`)
 				return;
 			}
-			let _args = minimist(split.slice(1), {boolean: this.commands[commandName].flags});
+			let _args = minimist(split, {boolean: this.commands[commandName].flags});
 			if(!_args.h) {
 				let args = new CommandParameters();
 
@@ -160,9 +165,9 @@ export class BotModule {
 					console.log(reason)
 				})
 			} else {
-				message.channel.send("```\n" + this.commands[commandName].help.join('\n') + "\n```").then( dat => {
+				message.channel.send("```\n" + this.commands[commandName].help.join('\n').replace('%', this.PREFIX) + "\n```").then( dat => {
 					let msg = dat as Message
-					this.track(msg, "help")
+					this.track(msg, "confirm")
 				})
 				message.delete()
 			}
@@ -326,7 +331,7 @@ export class BotModule {
 		this.onMessageUpdate(oldMessage, newMessage)
 	}
 
-	@tracker("help")
+	@tracker("confirm")
 	helpTracker = new MessageTracker(this, t => {
 		t.setButton('👍', 
 			(db: MessageData, message: Message, user: User) => {

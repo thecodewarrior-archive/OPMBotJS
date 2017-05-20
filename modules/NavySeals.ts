@@ -1,5 +1,5 @@
 //module
-import { BotModule, command, MessageData, MessageTracker, tracker } from '../app/module';
+import { BotModule, command, MessageData, MessageTracker, tracker, CommandParameters } from '../app/module';
 import { Message, Client, Emoji, User, RichEmbed } from 'discord.js';
 import { ParsedArgs } from 'minimist';
 
@@ -13,7 +13,7 @@ export class NavySeals extends BotModule {
         "    -l",
         "        List the available seals",
         ]})
-    sendSeals(message: Message, args: ParsedArgs) {
+    sendSeals(message: Message, args: CommandParameters) {
         if(args.l) {
             message.delete()
             message.channel.send(Object.keys(this.data.seals).join(", ")).then(m => {

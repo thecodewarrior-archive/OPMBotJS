@@ -1,5 +1,5 @@
 //module
-import { BotModule, command, tracker, MessageTracker } from '../app/module';
+import { BotModule, command, tracker, MessageTracker, CommandParameters } from '../app/module';
 import { Message, Channel, GroupDMChannel, DMChannel, TextChannel, MessageOptions, RichEmbedOptions, RichEmbed } from 'discord.js';
 import { ParsedArgs } from 'minimist';
 import * as https from 'https';
@@ -18,13 +18,13 @@ export class AlbumExpand extends BotModule {
             "    %ea [link]",
         ]
     })
-    doCommand(message: Message, args: ParsedArgs) {
+    doCommand(message: Message, args: CommandParameters) {
         let channelP = Promise.resolve(message.channel)
         message.delete()
         channelP.then(channel => {
             if (args._.length > 0) {
                 let link: string | null = null
-                args._.forEach(v => {
+                args.positional.forEach(v => {
                     if (link !== null) return
                     let match = v.match(PATTERN)
                     if (match !== null) {

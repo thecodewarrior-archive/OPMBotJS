@@ -109,8 +109,8 @@ export class BotModule {
 		if(parameters[0] !== Message) {
 			throw "First parameter of every command method must be a `Message` - the message sent"
 		}
-		if(parameters[1] !== Object) {
-			throw "Second parameter of every command method must be an `Object` - the parsed command line arguments"
+		if(parameters[1] !== CommandParameters) {
+			throw "Second parameter of every command method must be a `CommandParameters` - the parsed command line arguments"
 		}
 		key.flags.push("h")
 		for(var i in names) {
@@ -127,7 +127,7 @@ export class BotModule {
 		const commandName = commandMatch === null ? null : commandMatch[1]
 
 		if(commandName !== null && this.commands[commandName] !== undefined) {
-			let _split = message.content.substr(commandMatch!![0].length).match(/(?:[^\s"]+|"[^"]*")+/g)
+			let _split = message.content.substr(commandMatch!![0].length).match(/(?:[^\s"]+|"(?:[^"]|\\")*")+/g)
 			let split = (_split == null ? [] : _split)
 
 			if((message.channel instanceof DMChannel || message.channel instanceof GroupDMChannel) && !this.commands[commandName].dm) {
@@ -143,8 +143,9 @@ export class BotModule {
 				for (var k in _args) {
 					let v = _args[k]
 					if (k === "_" && v instanceof Array) {
+						args.positional = Array.of<string>(...this.processStrings(v))
 						let arr: any[] = []
-						args._ = arr
+						args.parsed = arr
 						for (var i in v) {
 							promises.push(this._parseValue(message, v[i]).then((value) => {
 								arr[i] = value
@@ -165,7 +166,7 @@ export class BotModule {
 					console.log(reason)
 				})
 			} else {
-				message.channel.send("```\n" + this.commands[commandName].help.join('\n').replace('%', this.PREFIX) + "\n```").then( dat => {
+				message.channel.send("```\n" + this.commands[commandName].help.join('\n').replace(/%/g, this.PREFIX) + "\n```").then( dat => {
 					let msg = dat as Message
 					this.track(msg, "confirm")
 				})
@@ -176,17 +177,30 @@ export class BotModule {
 		}
 	}
 
+	protected processStrings(v: string[]): string[] {
+		let o: string[] = []
+		for(let i in v) {
+			let s = v[i]
+
+			if(s.startsWith('"') && s.endsWith('"')) {
+				o[i] = s.substr(1, s.length-2)
+			} else {
+				o[i] = s
+			}
+		}
+		return o
+	}
+
 	/** DO NOT OVERRIDE */
 	protected _parseValue(message: Message, v: any): Promise<any>{
 		if(typeof v === "boolean") {
 			return Promise.resolve(v)
 		}
 		if(typeof v === "string") {
-			let match = v.match(/^"(.*)"$/)
-			if (match !== null) {
-				return Promise.resolve(match[0])
+			if (v.startsWith('"') && v.endsWith('"')) {
+				return Promise.resolve(v.substr(1, v.length-2))
 			}
-			match = v.match(/^<@!?(\d{18})>$/)
+			let match = v.match(/^<@!?(\d{18})>$/)
 			if (match !== null) {
 				return message.guild.fetchMember(match[1])
 			}
@@ -436,7 +450,22 @@ export class MessageTracker {
 
 export class CommandParameters {
 	[key: string] : any
-	_: any[] = []
+	positional: string[] = []
+	parsed: any[] = []
+
+	private i = 0;
+	consume(): string {
+		if(this.i >= this.positional.length) {
+			return ""
+		}
+		return this.positional[this.i++]
+	}
+	consumeParsed(): any {
+		if(this.i >= this.parsed.length) {
+			return {}
+		}
+		return this.parsed[this.i++]
+	}
 }
 
 export function command(info: { names: string[], flags?: string[], help: string[], dm?: boolean}) {

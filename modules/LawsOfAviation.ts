@@ -1,5 +1,5 @@
 //module
-import { BotModule, command, tracker, MessageTracker } from '../app/module';
+import { BotModule, command, tracker, MessageTracker, CommandParameters } from '../app/module';
 import { Message, Client } from 'discord.js';
 import { ParsedArgs } from 'minimist';
 
@@ -35,7 +35,7 @@ export class LawsOfAviation extends BotModule {
         "OPTIONS",
         "    --page=N",
         "         start at page N. N is zero-indexed, and defaults to zero"]})
-    laws(message: Message, args: ParsedArgs) {
+    laws(message: Message, args: CommandParameters) {
         let page = parseInt(args.page) | 0
         message.channel.send(this.lawPages[page]).then( (sent) => {
             this.track(sent as Message, "pages")

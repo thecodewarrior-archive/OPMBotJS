@@ -1,4 +1,4 @@
-import { Client, Channel, ClientUserSettings, Emoji, Guild, User, GuildMember, Collection, Snowflake, Message, MessageReaction, Role, UserResolvable } from 'discord.js';
+import { Client, Channel, ClientUserSettings, Emoji, Guild, User, GuildMember, Collection, Snowflake, Message, MessageReaction, Role, UserResolvable, DMChannel, GroupDMChannel } from 'discord.js';
 import * as EventEmitter from "events";
 import "reflect-metadata";
 import { ParsedArgs} from "minimist";
@@ -9,10 +9,10 @@ import * as tp from "typed-promisify";
 import Datastore = require("nedb");
 const mkdirp: any = require("mkdirp");
 
-
 export class BotModule {
 	protected client: Client;
 	protected readonly data: any;
+	protected readonly env: any;
 	protected readonly db: Datastore;
 
 	readonly modulename: string;
@@ -24,12 +24,18 @@ export class BotModule {
 		this.modulename = this.constructor.name;
 		this.moduledir = path.join(__dirname, "../module_data/data", this.modulename)
 		let jsonFile = path.join(__dirname, "../module_data/json", this.modulename + ".json")
+		let envFile = path.join(__dirname, "../module_data/env", this.modulename + ".json")
 		let dbFile = path.join(__dirname, "../module_data/db", this.modulename)
 
 		if(fs.existsSync(jsonFile)) {
 			this.data = JSON.parse(fs.readFileSync(jsonFile).toString())
 		} else {
 			this.data = {}
+		}
+		if(fs.existsSync(envFile)) {
+			this.env = JSON.parse(fs.readFileSync(envFile).toString())
+		} else {
+			this.env = {}
 		}
 
 		this.db = new Datastore({filename: dbFile, autoload: true})
@@ -93,12 +99,12 @@ export class BotModule {
 	}
 
 
-	private commands: { [key: string] : { method: string, flags: string[] } }
+	private commands: { [key: string] : { method: string, flags: string[], help: string[], dm: boolean } }
 	
 	protected parseValue(message: Message, v: any): Promise<any> { return Promise.resolve(v) }
 
 	/** DO NOT OVERRIDE */
-	_addCommand(names: string[], key: { method: string, flags: string[] }, parameters: Function[]) {
+	_addCommand(names: string[], key: { method: string, flags: string[], help: string[], dm: boolean }, parameters: Function[]) {
 		if(this.commands == undefined) this.commands = {}
 		if(parameters[0] !== Message) {
 			throw "First parameter of every command method must be a `Message` - the message sent"
@@ -106,8 +112,9 @@ export class BotModule {
 		if(parameters[1] !== Object) {
 			throw "Second parameter of every command method must be an `Object` - the parsed command line arguments"
 		}
+		key.flags.push("h")
 		for(var i in names) {
-			this.commands[names[i]] = key 
+			this.commands[names[i]] = key
 		}
 	}
 
@@ -118,34 +125,47 @@ export class BotModule {
 		let commandName = split.length == 0 ? "" : split[0]
 
 		if(this.commands[commandName] !== undefined) {
+			if((message.channel instanceof DMChannel || message.channel instanceof GroupDMChannel) && !this.commands[commandName].dm) {
+				message.channel.send(`I'm sorry, \`${commandName}\` does not seem to work in dms.\n\nIf you would like this feature in particular please contact @thecodewarrior#6629`)
+				return;
+			}
 			let _args = minimist(split.slice(1), {boolean: this.commands[commandName].flags});
-			let args = new CommandParameters();
+			if(!_args.h) {
+				let args = new CommandParameters();
 
-			let promises: Promise<any>[] = []
+				let promises: Promise<any>[] = []
 
-			for(var k in _args) {
-				let v = _args[k]
-				if(k === "_" && v instanceof Array) {
-					let arr: any[] = []
-					args._ = arr
-					for(var i in v) {
-						promises.push(this._parseValue(message, v[i]).then((value) => {
-							arr[i] = value
+				for (var k in _args) {
+					let v = _args[k]
+					if (k === "_" && v instanceof Array) {
+						let arr: any[] = []
+						args._ = arr
+						for (var i in v) {
+							promises.push(this._parseValue(message, v[i]).then((value) => {
+								arr[i] = value
+							}))
+						}
+					} else {
+						let _k = k
+						promises.push(this._parseValue(message, v).then((value) => {
+							args[_k] = value
 						}))
 					}
-				} else {
-					promises.push(this._parseValue(message, v).then( (value) => {
-						args[k] = value
-					}))
 				}
-			}
 
-			Promise.all(promises).then( (value) => {
-				(this as any)[this.commands[commandName].method](message, args)
-			}).catch((reason: any) => {
-				console.log("error in command! Message text: `" + message.content + "`")
-				console.log(reason)
-			})
+				Promise.all(promises).then((value) => {
+					(this as any)[this.commands[commandName].method](message, args)
+				}).catch((reason: any) => {
+					console.log("error in command! Message text: `" + message.content + "`")
+					console.log(reason)
+				})
+			} else {
+				message.channel.send("```\n" + this.commands[commandName].help.join('\n') + "\n```").then( dat => {
+					let msg = dat as Message
+					this.track(msg, "help")
+				})
+				message.delete()
+			}
 		} else {
 			this.onMessage(message)
 		}
@@ -153,6 +173,9 @@ export class BotModule {
 
 	/** DO NOT OVERRIDE */
 	protected _parseValue(message: Message, v: any): Promise<any>{
+		if(typeof v === "boolean") {
+			return Promise.resolve(v)
+		}
 		if(typeof v === "string") {
 			let match = v.match(/^"(.*)"$/)
 			if (match !== null) {
@@ -177,7 +200,7 @@ export class BotModule {
 	trackers: Map<string, string>
 	activeTrackers = new Map<{ guild: Snowflake, channel: Snowflake, message: Snowflake }, string>()
 
-	msgData<T>(message: Message, process: (data: any) => T): Promise<T> {
+	msgData<T>(message: Message, process: (data: any) => Promise<T>): Promise<T> {
 		return new Promise( (res, rej) => {
 			let q = {
 				type: "messageData",
@@ -195,21 +218,22 @@ export class BotModule {
 						data: {}
 					}
 				let pre = JSON.stringify(doc.data)
-				let ret = process(doc.data);
-				if(pre !== JSON.stringify(doc.data)) {
-					this.db.update(q, doc, { upsert: true }, () => {
+				process(doc.data).then( (ret) => {
+					if (pre !== JSON.stringify(doc.data)) {
+						this.db.update(q, doc, { upsert: true }, () => {
+							res(ret)
+						})
+					} else {
 						res(ret)
-					})
-				} else {
-					res(ret)
-				}
+					}
+				})
 			})
 		})
 	}
 
 	track(message: Message, name: string) {
 		let _name = this.trackers.get(name)
-		console.log(_name)
+		console.log(`tracking '${message.id}' with '${name}'`)
 		if(_name === undefined) return
 
 		((this as any)[_name] as MessageTracker).init(message)
@@ -302,18 +326,29 @@ export class BotModule {
 		this.onMessageUpdate(oldMessage, newMessage)
 	}
 
+	@tracker("help")
+	helpTracker = new MessageTracker(this, t => {
+		t.setButton('👍', 
+			(db: MessageData, message: Message, user: User) => {
+				return message.delete()
+			},
+			() => { return Promise.resolve(true) }
+		)
+	})
 }
 
 export class MessageTracker {
-	constructor(callback: (v: MessageTracker) => void) {
+	constructor(module: BotModule, callback: (v: MessageTracker) => void) {
+		this.module = module
 		callback(this)
 	}
 
-	setButton(emoji: string, click: (message: Message, user: User) => Promise<any>, enable: (message: Message) => Promise<boolean> = (m) => { return Promise.resolve(true) }) {
+	setButton(emoji: string, click: (db: MessageData, message: Message, user: User) => Promise<any>, enable: (db: MessageData, message: Message) => Promise<boolean> = (m) => { return Promise.resolve(true) }) {
 		this.buttons.set(emoji, { enable: enable, click: click })
 	}
 
-	private buttons = new Map<string, { enable: (message: Message) => Promise<boolean>, click: (message: Message, user: User) => Promise<any> }>()
+	private module: BotModule
+	private buttons = new Map<string, { enable: (db: MessageData, message: Message) => Promise<boolean>, click: (db: MessageData, message: Message, user: User) => Promise<any> }>()
 
 	init(message: Message) {
 		this.addButtonReactions(message)
@@ -325,74 +360,87 @@ export class MessageTracker {
 			if(button === undefined) {
 				v.remove()
 			} else {
-				button.enable(message).then( (enabled) => {
-					if(enabled) {
-						v.users.forEach((value) => {
-							if (value.id == message.client.user.id) return;
-							v.remove(value)
-						})
-					} else {
-						v.remove()
-					}
-				});
+				this.module.msgData(message, db => {
+					return button!!.enable(db, message).then((enabled) => {
+						if (enabled) {
+							v.users.forEach((value) => {
+								if (value.id == message.client.user.id) return;
+								v.remove(value)
+							})
+						} else {
+							v.remove()
+						}
+					});
+				})
 			}
 		})
 		this.buttons.forEach((value, key) => {
-			value.enable(message).then( (enabled) => {
-				if(enabled) {
-					let e = message.client.emojis.find("name", key)
-					if (e !== null) {
-						message.react(e).catch((err) => {
-							console.log(err)
-						})
-					} else {
-						message.react(key).catch((err) => {
-							console.log(err)
-						})
+			this.module.msgData(message, db => {
+				return value.enable(db, message).then((enabled) => {
+					if (enabled) {
+						let e = message.client.emojis.find("name", key)
+						if (e !== null) {
+							message.react(e).catch((err) => {
+								console.log(err)
+							})
+						} else {
+							message.react(key).catch((err) => {
+								console.log(err)
+							})
+						}
 					}
-				}
-			});
+				});
+			})
 		});
 	}
 
-	onMessageDelete(message: Message): boolean { return false; }
-	onMessageDeleteBulk(messages: Collection<Snowflake, Message>): boolean { return false; }
-	onMessageReactionAdd(messageReaction: MessageReaction, user: User): boolean {
+	onMessageDelete(message: Message) {
+
+	}
+
+	onMessageDeleteBulk(messages: Collection<Snowflake, Message>) { 
+		messages.forEach(v => this.onMessageDelete(v))
+	}
+
+	onMessageReactionAdd(messageReaction: MessageReaction, user: User) {
 		const button = this.buttons.get(messageReaction.emoji.name)
 		if(button != undefined) {
-			button.enable(messageReaction.message).then( (enabled) => {
-				if(enabled) {
-					messageReaction.remove(user)
-					button.click(messageReaction.message, user).then(() => {
-						this.addButtonReactions(messageReaction.message);
-					})
-				} else {
-					messageReaction.remove()
-				}
+			this.module.msgData(messageReaction.message, db => {
+				return button.enable(db, messageReaction.message).then((enabled) => {
+					if (enabled) {
+						messageReaction.remove(user)
+						this.module.msgData(messageReaction.message, data => {
+							return button.click(data, messageReaction.message, user).then(() => {
+								this.addButtonReactions(messageReaction.message);
+							})
+						})
+					} else {
+						messageReaction.remove()
+					}
+				});
 			});
 		} else {
 			messageReaction.remove()
 		}
-
-		return false
 	}
 	onMessageReactionRemove(messageReaction: MessageReaction, user: User): boolean { return false; }
 	onMessageReactionRemoveAll(message: Message): boolean { return false; }
 	onMessageUpdate(oldMessage: Message, newMessage: Message): boolean { return false; }
 
 }
-(MessageTracker as any).NOOP = new MessageTracker(() => { return Promise.resolve() })
 
 export class CommandParameters {
 	[key: string] : any
 	_: any[] = []
 }
 
-export function command(info: { names: string[], flags?: string[] }) {
+export function command(info: { names: string[], flags?: string[], help: string[], dm?: boolean}) {
 	return (target: BotModule, key: string, descriptor: PropertyDescriptor) => {
 		target._addCommand(info.names, {
 			method: key,
-			flags: ( info.flags === undefined ? [] : info.flags )
+			flags: ( info.flags === undefined ? [] : info.flags ),
+			help: info.help,
+			dm: info.dm === undefined ? false : info.dm
 		}, Reflect.getMetadata("design:paramtypes", target, key));
 	}
 }
@@ -428,5 +476,6 @@ type MessageDataRecord = {
 	channelID: Snowflake
 	messageID: Snowflake
 
-	data: any
+	data: MessageData
 }
+export class MessageData { [key: string]: any }

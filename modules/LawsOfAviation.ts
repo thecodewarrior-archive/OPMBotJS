@@ -26,24 +26,24 @@ export class LawsOfAviation extends BotModule {
         })
     }
 
-    @command({ names: ["!lawsofaviation", "!laws"] })
+    @command({ names: ["!lawsofaviation", "!laws"], help: ["Prints out the paginated script of The Bee Movie"]})
     laws(message: Message, args: ParsedArgs) {
         let page = parseInt(args._[0]) | 0
         message.channel.send(this.lawPages[page]).then( (sent) => {
             this.track(sent as Message, "pages")
             this.msgData(sent as Message, data => {
                 data['page'] = page
+                return Promise.resolve()
             })
         })
     }
 
     @tracker("pages")
-    tracker: MessageTracker = new MessageTracker((it) => {
-        it.setButton("➡", (message, user) => {
-            this.msgData(message, data => {
-                data['page']++
-                message.edit(this.lawPages[data['page']])
-            })
+    tracker: MessageTracker = new MessageTracker(this, (it) => {
+        it.setButton("➡", (db, message, user) => {
+            db['page']++
+            message.edit(this.lawPages[db['page']])
+            return Promise.resolve()
         })
     })
 }

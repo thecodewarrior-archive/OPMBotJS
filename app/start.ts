@@ -1,6 +1,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import * as discord from "discord.js";
+import * as watch from "watch";
 
 import { BotModule } from './module';
 import { Channel, ClientUserSettings, Emoji, Guild, User, GuildMember, Collection, Snowflake, Message, MessageReaction, Role, UserResolvable } from 'discord.js';
@@ -311,6 +312,8 @@ function searchCache(moduleName: string, callback: (child: any) => void) {
     }
 };
 
+const markerLine = "//module"
+
 function loadModule(file: string) {
 	console.log("Loading module `" + file + "`")
 	purgeCache(file)
@@ -326,15 +329,27 @@ function loadModule(file: string) {
 	}
 }
 
+function tryFile(file: string) {
+	if(!fs.existsSync(file)) {
+		delete modules[file]
+	} else {
+		let firstbit = fs.readFileSync(file, 'utf8').toString().substr(0, markerLine.length)
+		if (firstbit === markerLine) {
+			loadModule(file)
+		}
+	}
+}
+
 client.on('ready', () => {
-	let check = "//module"
-	recursiveReaddir(path.join(__dirname, "../modules"), [], (err: any, files: string[]) => {
+	let dir = path.join(__dirname, "../modules")
+	recursiveReaddir(dir, [], (err: any, files: string[]) => {
 		for(var i in files) {
-			let file = files[i]
-			let firstbit = fs.readFileSync(file, 'utf8').toString().substr(0, check.length) 
-			if(firstbit === check) {
-				loadModule(file)
-			}
+			tryFile(files[i])
+		}
+	})
+	watch.watchTree(dir, (f: any, curr: fs.Stats, prev: fs.Stats) => {
+		if(typeof f === "string") {
+			tryFile(f)
 		}
 	})
 });

@@ -1,3 +1,4 @@
 app/token.txt
+module_data/env/
 node_modules/
 .*.sw?

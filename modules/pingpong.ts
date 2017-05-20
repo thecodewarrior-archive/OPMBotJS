@@ -13,7 +13,7 @@ export class PingPong extends BotModule {
         }
     }
 
-    @command({ names: ["$doPing", "$dp"], flags: ["a", "b", "flag"] })
+    @command({ names: ["$doPing", "$dp"], flags: ["a", "b", "flag"], help: ["ping, pong, ping, pong!"]})
     doPing(message: Message, args: ParsedArgs) {
         message.channel.sendCode("json", JSON.stringify(args))
     }

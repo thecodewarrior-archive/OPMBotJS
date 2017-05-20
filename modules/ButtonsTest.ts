@@ -1,4 +1,4 @@
-//module
+//not_module
 import { BotModule, command, tracker, MessageTracker } from '../app/module';
 import { Message, Client } from 'discord.js';
 import { ParsedArgs } from 'minimist';

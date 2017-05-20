@@ -3,3 +3,4 @@
 /// <reference path="globals/node/index.d.ts" />
 /// <reference path="modules/minimist/index.d.ts" />
 /// <reference path="modules/nedb/index.d.ts" />
+/// <reference path="modules/watch/index.d.ts" />

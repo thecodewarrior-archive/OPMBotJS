@@ -1,6 +1,6 @@
 //module
 import { BotModule, command, tracker, MessageTracker, CommandParameters } from '../app/module';
-import { Message, Client } from 'discord.js';
+import { Message, Client, RichEmbed } from 'discord.js';
 import { ParsedArgs } from 'minimist';
 
 export class LawsOfAviation extends BotModule {
@@ -11,9 +11,11 @@ export class LawsOfAviation extends BotModule {
         this.fileContent("laws.txt").then( (text) => {
             let sections = text.split("\n\n")
             let current = ""
+            let lines = 0
+            let pages: string[] = []
             for(var i in sections) {
                 let s = sections[i]
-                if(current.length + 2 + s.length > 2000) {
+                if(current.length - current.replace(/\n/g, '').length > 20) {
                     this.lawPages.push(current)
                     current = s
                 } else {
@@ -28,29 +30,38 @@ export class LawsOfAviation extends BotModule {
 
     @command({ names: ["lawsofaviation", "laws"], help: [
         "NAME",
-        "    lawsofaviation - Print the laws of aviation... and more",
+        "    lawsofaviation - Print the laws of aviation... the entire laws of aviation",
         "SYNOPSIS",
         "    %lawsofaviation [--page=N]",
         "    %laws [--page=N]",
         "OPTIONS",
         "    --page=N",
-        "         start at page N. N is zero-indexed, and defaults to zero"]})
+        "         start at page N. N is zero-indexed, and defaults to zero"],
+        desc: "Print the laws of aviation... the entire laws of aviation"
+    })
     laws(message: Message, args: CommandParameters) {
+
         let page = parseInt(args.page) | 0
-        message.channel.send(this.lawPages[page]).then( (sent) => {
-            this.track(sent as Message, "pages")
-            this.msgData(sent as Message, data => {
+        message.channel.send(this.page(page)).then( (sent) => {
+            this.track(sent, "pages")
+            this.msgData(sent, data => {
                 data['page'] = page
                 return Promise.resolve()
             })
         })
     }
 
+    page(index: number): RichEmbed {
+        return new RichEmbed()
+            .setDescription(this.lawPages[index])
+            .setFooter(`page ${index + 1}/${this.lawPages.length}`)
+    }
+
     @tracker("pages")
     tracker: MessageTracker = new MessageTracker(this, (it) => {
         it.setButton("➡", (db, message, user) => {
             db['page']++
-            message.edit(this.lawPages[db['page']])
+            message.edit(this.page(db['page']))
             return Promise.resolve()
         })
     })

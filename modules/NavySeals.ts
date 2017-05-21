@@ -12,18 +12,21 @@ export class NavySeals extends BotModule {
         "OPTIONS",
         "    -l",
         "        List the available seals",
-        ]})
+        "        special case, this prints the available comman"
+        ],
+        desc: "What the fuck did you just fucking say about me?"
+    })
     sendSeals(message: Message, args: CommandParameters) {
         if(args.l) {
             message.delete()
             message.channel.send(Object.keys(this.data.seals).join(", ")).then(m => {
-                this.track(m as Message, 'confirm')
+                this.track(m, 'confirm')
             })
             return;
         }
 
         let type = "og";
-        let firstArg: any | undefined = args._[0]
+        let firstArg: any | undefined = args.parsed[0]
         if(firstArg !== undefined) {
             if(firstArg instanceof Emoji) {
                 type = ":" + firstArg.name + ":"
@@ -39,7 +42,7 @@ export class NavySeals extends BotModule {
                 .setDescription(this.data.seals[type])
                 .setFooter('React to delete')
         }).then(m => {
-            this.track(m as Message, 'fuckoff')
+            this.track(m, 'fuckoff')
         })
     }
 	

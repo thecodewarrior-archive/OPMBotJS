@@ -4,6 +4,7 @@ import { Message, Channel, GroupDMChannel, DMChannel, TextChannel, MessageOption
 import { ParsedArgs } from 'minimist';
 import * as https from 'https';
 import * as url from 'url'
+import { simpleTrackerPage } from '../app/simple_trackers';
 const PATTERN = /https?:\/\/imgur.com\/(?:\w+\/)+([A-Za-z0-9]{5})/
 
 
@@ -16,13 +17,14 @@ export class AlbumExpand extends BotModule {
             "SYNOPSIS",
             "    %expandAlbum [link]",
             "    %ea [link]",
-        ]
+        ],
+        desc: "Expand an imgur album"
     })
     doCommand(message: Message, args: CommandParameters) {
         let channelP = Promise.resolve(message.channel)
         message.delete()
         channelP.then(channel => {
-            if (args._.length > 0) {
+            if (args.positional.length > 0) {
                 let link: string | null = null
                 args.positional.forEach(v => {
                     if (link !== null) return
@@ -62,14 +64,14 @@ export class AlbumExpand extends BotModule {
                 images.push({ link: elem.link, desc: elem.description })
             });
             channel.send(this.message(album.title, 0, images)).then(m => {
-                this.msgData(m as Message, d => {
+                this.msgData(m, d => {
                     d.albumData = images;
                     d.title = album.title
                     d.index = 0;
                     return Promise.resolve()
-                }).then(v => {
-                    this.track(m as Message, "imgur_page")
-                })
+                }).forEach( it => { it.then(v => {
+                    this.track(v.message, "imgur_page")
+                }) })
             })
         }).catch (e => console.log(e))
     }
@@ -111,20 +113,9 @@ export class AlbumExpand extends BotModule {
     };
 
     @tracker("imgur_page")
-    tracker: MessageTracker = new MessageTracker(this, (it) => {
-        it.setButton("➡", (db, message, user) => {
-            db.index++
-            message.edit(this.message(db.title, db.index, db.albumData))
-            return Promise.resolve()
-        }, (db) => {
-            return Promise.resolve(db.index < db.albumData.length-1)
-        })
-        it.setButton("⬅", (db, message, user) => {
-            db.index--
-            message.edit(this.message(db.title, db.index, db.albumData))
-            return Promise.resolve()
-        }, (db) => {
-            return Promise.resolve(db.index > 0)
+    pages = new MessageTracker(this, it => {
+        simpleTrackerPage(it, (db) => db.albumData.length, (db, message, user, index) => {
+            return message.edit(this.message(db.title, db.index, db.albumData))
         })
     })
 }

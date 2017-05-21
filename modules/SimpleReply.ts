@@ -3,6 +3,19 @@ import { BotModule, command, CommandParameters } from '../app/module';
 import { Message, RichEmbed, Snowflake } from 'discord.js';
 import { ParsedArgs } from 'minimist';
 
+
+function replaceAll(str: string, mapObj: { [key: string]: string }){
+    var re = new RegExp("(\\\\*)(" + Object.keys(mapObj).join("|") + ")","g");
+
+    return str.replace(re, (matched) => {
+        let backslashes = matched.match(/\\*/)
+        if(backslashes !== null && backslashes[0].length % 2 == 1) {
+            return matched
+        }
+        return (backslashes !== null && backslashes[0].length > 0 ? backslashes[0].substr(1) : "") + mapObj[matched.substr(backslashes === null ? 0 : backslashes[0].length)];
+    });
+}
+
 export class SimpleReply extends BotModule {
 	onMessage(message: Message) {
         this.db.find<ReplyRecord>({ type: "reply", guildID: message.guild.id }, (err, docs) => {
@@ -10,8 +23,14 @@ export class SimpleReply extends BotModule {
                 return message.content.startsWith(v.command)
             })
             if(value !== undefined) {
-                message.channel.send(value.content)
+                message.channel.send(this.formatReply(message, value.content))
             }
+        })
+    }
+
+    formatReply(message: Message, text: string): string {
+        return replaceAll(text, {
+            "<SENDER>": "@" + message.author.tag,
         })
     }
 
@@ -23,8 +42,8 @@ export class SimpleReply extends BotModule {
             "    simpleReply - configure the SimpleReply utility",
             "SYNOPSIS",
             "    %simpleReply list",
-            "    %simpleReply create \"trigger phrase\"",
-            "    %simpleReply rm \"trigger phrase\"",
+            "    %simpleReply create \"<trigger phrase>\"",
+            "    %simpleReply rm \"<trigger phrase>\"",
             "DESCRIPTION",
             "    list",
             "        Prints out a list of all the simple replies for this server",
@@ -32,7 +51,8 @@ export class SimpleReply extends BotModule {
             "        Creates a simple reply with the passed trigger phrase, with the content of the previous message",
             "    rm",
             "        Removes all replies with the passed trigger phrase",
-        ]
+        ],
+        desc: "configure the SimpleReply utility"
     })
     cmd(message: Message, args: CommandParameters) {
         const subCommand = args.consume()

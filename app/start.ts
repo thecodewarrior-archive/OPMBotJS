@@ -2,6 +2,7 @@ import * as fs from "fs";
 import * as path from "path";
 import * as discord from "discord.js";
 import * as watch from "watch";
+import { BaseModule } from "./base_module"
 
 import { BotModule } from './module';
 import { Channel, ClientUserSettings, Emoji, Guild, User, GuildMember, Collection, Snowflake, Message, MessageReaction, Role, UserResolvable } from 'discord.js';
@@ -312,6 +313,9 @@ function searchCache(moduleName: string, callback: (child: any) => void) {
     }
 };
 
+modules["base"] = new BaseModule(client, modules)
+modules["base"].transfer(undefined)
+
 const markerLine = "//module"
 
 function loadModule(file: string) {
@@ -323,9 +327,7 @@ function loadModule(file: string) {
 
 		let existing = modules[file];
 		modules[file] = botmodule;
-		if (existing !== undefined) {
-			botmodule.transfer(existing)
-		}
+		botmodule.transfer(existing)
 	}
 }
 

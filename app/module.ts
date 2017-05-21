@@ -13,7 +13,7 @@ export class BotModule {
 	protected client: Client;
 	protected readonly data: any;
 	protected readonly env: any;
-	protected readonly db: Datastore;
+	protected db: Datastore;
 
 	readonly modulename: string;
 	readonly moduledir: string;
@@ -25,7 +25,6 @@ export class BotModule {
 		this.moduledir = path.join(__dirname, "../module_data/data", this.modulename)
 		let jsonFile = path.join(__dirname, "../module_data/json", this.modulename + ".json")
 		let envFile = path.join(__dirname, "../module_data/env", this.modulename + ".json")
-		let dbFile = path.join(__dirname, "../module_data/db", this.modulename)
 
 		if(fs.existsSync(jsonFile)) {
 			this.data = JSON.parse(fs.readFileSync(jsonFile).toString())
@@ -37,11 +36,16 @@ export class BotModule {
 		} else {
 			this.env = {}
 		}
-
-		this.db = new Datastore({filename: dbFile, autoload: true})
 	}
 
-	transfer(oldModule: this) {}
+	transfer(oldModule?: this) {
+		if (oldModule !== undefined && oldModule.db !== undefined) {
+			this.db = oldModule.db
+		} else {
+			let dbFile = path.join(__dirname, "../module_data/db", this.modulename)
+			this.db = new Datastore({ filename: dbFile, autoload: true })
+		}
+	}
 
 	onChannelCreate(channel: Channel) {}
 	onChannelDelete(channel: Channel) {}
@@ -99,22 +103,25 @@ export class BotModule {
 	}
 
 
-	private commands: { [key: string] : { method: string, flags: string[], help: string[], dm: boolean } }
-	
+	commands: CommandDefinition[]
+	commandsByName: Map<string, CommandDefinition>
+
 	protected parseValue(message: Message, v: any): Promise<any> { return Promise.resolve(v) }
 
 	/** DO NOT OVERRIDE */
-	_addCommand(names: string[], key: { method: string, flags: string[], help: string[], dm: boolean }, parameters: Function[]) {
-		if(this.commands == undefined) this.commands = {}
+	_addCommand(command: CommandDefinition, parameters: Function[]) {
+		if(this.commands == undefined) this.commands = []
+		if(this.commandsByName == undefined) this.commandsByName = new Map()
+
 		if(parameters[0] !== Message) {
 			throw "First parameter of every command method must be a `Message` - the message sent"
 		}
 		if(parameters[1] !== CommandParameters) {
 			throw "Second parameter of every command method must be a `CommandParameters` - the parsed command line arguments"
 		}
-		key.flags.push("h")
-		for(var i in names) {
-			this.commands[names[i]] = key
+		this.commands.push(command)
+		for(var i in command.names) {
+			this.commandsByName.set(command.names[i], command)
 		}
 	}
 
@@ -122,19 +129,23 @@ export class BotModule {
 	readonly PREFIX = "!"
 	/** DO NOT OVERRIDE */
 	_onMessage(message: Message) {
-		if(this.commands === undefined) this.commands = {}
+		if(this.commands === undefined) this.commands = []
+		if(this.commandsByName === undefined) this.commandsByName = new Map()
+
 		let commandMatch = message.content.match(this.PREFIX_REGEX)
 		const commandName = commandMatch === null ? null : commandMatch[1]
+		const command = commandName === null ? undefined : this.commandsByName.get(commandName)
 
-		if(commandName !== null && this.commands[commandName] !== undefined) {
-			let _split = message.content.substr(commandMatch!![0].length).match(/(?:[^\s"]+|"(?:[^"]|\\")*")+/g)
-			let split = (_split == null ? [] : _split)
+		if(command !== undefined) {
+			let _split = message.content.substr(commandMatch!![0].length).match(/(?:(?:[^\s"]|\\")+|"(?:\\\\|\\"|[^"])*")+/g)
+			let split = this.processStrings(_split == null ? [] : _split)
 
-			if((message.channel instanceof DMChannel || message.channel instanceof GroupDMChannel) && !this.commands[commandName].dm) {
+			if((message.channel instanceof DMChannel || message.channel instanceof GroupDMChannel) && !command.dm) {
 				message.channel.send(`I'm sorry, \`${commandName}\` does not seem to work in dms.\n\nIf you would like this feature in particular please contact @thecodewarrior#6629`)
 				return;
 			}
-			let _args = minimist(split, {boolean: this.commands[commandName].flags});
+
+			let _args = minimist(split, {boolean: Array.of(...command.flags, "h")});
 			if(!_args.h) {
 				let args = new CommandParameters();
 
@@ -143,7 +154,7 @@ export class BotModule {
 				for (var k in _args) {
 					let v = _args[k]
 					if (k === "_" && v instanceof Array) {
-						args.positional = Array.of<string>(...this.processStrings(v))
+						args.positional = Array.of<string>(...v)
 						let arr: any[] = []
 						args.parsed = arr
 						for (var i in v) {
@@ -160,15 +171,14 @@ export class BotModule {
 				}
 
 				Promise.all(promises).then((value) => {
-					(this as any)[this.commands[commandName].method](message, args)
+					(this as any)[command.method](message, args)
 				}).catch((reason: any) => {
 					console.log("error in command! Message text: `" + message.content + "`")
 					console.log(reason)
 				})
 			} else {
-				message.channel.send("```\n" + this.commands[commandName].help.join('\n').replace(/%/g, this.PREFIX) + "\n```").then( dat => {
-					let msg = dat as Message
-					this.track(msg, "confirm")
+				message.channel.send("```\n" + command.help.join('\n').replace(/%/g, this.PREFIX) + "\n```").then( dat => {
+					this.track(dat, "confirm")
 				})
 				message.delete()
 			}
@@ -183,7 +193,7 @@ export class BotModule {
 			let s = v[i]
 
 			if(s.startsWith('"') && s.endsWith('"')) {
-				o[i] = s.substr(1, s.length-2)
+				o[i] = s.substr(1, s.length-2).replace(/\\"/g, '"')
 			} else {
 				o[i] = s
 			}
@@ -197,9 +207,6 @@ export class BotModule {
 			return Promise.resolve(v)
 		}
 		if(typeof v === "string") {
-			if (v.startsWith('"') && v.endsWith('"')) {
-				return Promise.resolve(v.substr(1, v.length-2))
-			}
 			let match = v.match(/^<@!?(\d{18})>$/)
 			if (match !== null) {
 				return message.guild.fetchMember(match[1])
@@ -216,58 +223,79 @@ export class BotModule {
 		return this.parseValue(message, v)
 	}
 
-	trackers: Map<string, string>
-	activeTrackers = new Map<{ guild: Snowflake, channel: Snowflake, message: Snowflake }, string>()
+	msgData<T>(messages: Message | Message[], process: (data: any, message: Message) => Promise<T>): Promise<{ ret: T, message: Message}>[] {
+		let arr: Message[] = []
+		if(messages instanceof Array) {
+			arr = messages
+		} else {
+			arr = [messages]
+		}
 
-	msgData<T>(message: Message, process: (data: any) => Promise<T>): Promise<T> {
-		return new Promise( (res, rej) => {
-			let q = {
-				type: "messageData",
-				guildID: message.guild.id,
-				channelID: message.channel.id,
-				messageID: message.id,
-			}
-			this.db.findOne<MessageDataRecord>(q, (err, doc) => {
-				if (doc === null)
-					doc = {
-						type: "messageData",
-						guildID: message.guild.id,
-						channelID: message.channel.id,
-						messageID: message.id,
-						data: {}
-					}
-				let pre = JSON.stringify(doc.data)
-				process(doc.data).then( (ret) => {
-					if (pre !== JSON.stringify(doc.data)) {
-						this.db.update(q, doc, { upsert: true }, () => {
-							res(ret)
-						})
-					} else {
-						res(ret)
-					}
+		return arr.map( message => {
+			return new Promise((res, rej) => {
+				let q = {
+					type: "messageData",
+					guildID: message.guild.id,
+					channelID: message.channel.id,
+					messageID: message.id,
+				}
+				this.db.findOne<MessageDataRecord>(q, (err, doc) => {
+					if (doc === null)
+						doc = {
+							type: "messageData",
+							guildID: message.guild.id,
+							channelID: message.channel.id,
+							messageID: message.id,
+							data: {}
+						}
+					let pre = JSON.stringify(doc.data)
+					process(doc.data, message).then((ret) => {
+						if (pre !== JSON.stringify(doc.data)) {
+							this.db.update(q, doc, { upsert: true }, () => {
+								res({ ret, message })
+							})
+						} else {
+							res({ ret, message })
+						}
+					})
 				})
 			})
 		})
 	}
 
-	track(message: Message, name: string) {
-		let _name = this.trackers.get(name)
-		console.log(`tracking '${message.id}' with '${name}'`)
-		if(_name === undefined) return
+	private trackers: Map<string, string>
 
-		((this as any)[_name] as MessageTracker).init(message)
-		this.db.insert({
-			type: "tracker",
-			guildID: message.guild.id,
-			channelID: message.channel.id,
-			messageID: message.id,
+	track(messages: Message | Message[], name: string) {
+		let arr: Message[] = []
+		if(messages instanceof Array) {
+			arr = messages
+		} else {
+			arr = [messages]
+		}
 
-			tracker: name
+		arr.forEach( message => {
+			let _name = this.trackers.get(name)
+			console.log(`tracking '${message.id}' with '${name}'`)
+			if (_name === undefined) return
+
+			((this as any)[_name] as MessageTracker).init(message)
+			this.db.insert({
+				type: "tracker",
+				guildID: message.guild.id,
+				channelID: message.channel.id,
+				messageID: message.id,
+
+				tracker: name
+			})
 		})
 	}
 
 	/** DO NOT OVERRIDE */
 	_addTracker(name: string, key: string) {
+		let proto = Object.getPrototypeOf(this)
+		if(proto.trackers === this.trackers) {
+			this.trackers = new Map<string, string>(proto.trackers)
+		}
 		if(this.trackers === undefined)
 			this.trackers = new Map()
 		this.trackers.set(name, key)
@@ -454,33 +482,48 @@ export class CommandParameters {
 	parsed: any[] = []
 
 	private i = 0;
-	consume(): string {
+	pop(): string {
 		if(this.i >= this.positional.length) {
 			return ""
 		}
 		return this.positional[this.i++]
 	}
-	consumeParsed(): any {
+	popParsed(): any {
 		if(this.i >= this.parsed.length) {
 			return {}
 		}
 		return this.parsed[this.i++]
 	}
+
+	peek(): string {
+		if(this.i >= this.positional.length) {
+			return ""
+		}
+		return this.positional[this.i]
+	}
+	peekParsed(): any {
+		if(this.i >= this.parsed.length) {
+			return {}
+		}
+		return this.parsed[this.i]
+	}
 }
 
-export function command(info: { names: string[], flags?: string[], help: string[], dm?: boolean}) {
-	return (target: BotModule, key: string, descriptor: PropertyDescriptor) => {
-		target._addCommand(info.names, {
+export function command<T extends BotModule>(info: { names: string[], flags?: string[], help: string[], desc: string, dm?: boolean}) {
+	return (target: T, key: string, descriptor: PropertyDescriptor) => {
+		target._addCommand({
 			method: key,
+			names: info.names,
 			flags: ( info.flags === undefined ? [] : info.flags ),
 			help: info.help,
-			dm: info.dm === undefined ? false : info.dm
+			dm: info.dm === undefined ? false : info.dm,
+			desc: info.desc
 		}, Reflect.getMetadata("design:paramtypes", target, key));
 	}
 }
 
-export function tracker(name: string) {
-	return (target: BotModule, key: string) => {
+export function tracker<T extends BotModule>(name: string) {
+	return (target: T, key: string) => {
 		target._addTracker(name, key)
 	}
 }
@@ -513,3 +556,12 @@ type MessageDataRecord = {
 	data: MessageData
 }
 export class MessageData { [key: string]: any }
+
+export type CommandDefinition = {
+	method: string,
+	names: string[],
+	flags: string[],
+	help: string[],
+	desc: string,
+	dm: boolean
+}

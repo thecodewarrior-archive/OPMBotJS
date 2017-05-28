@@ -2,6 +2,7 @@
 import { BotModule, command, CommandParameters } from '../app/module';
 import { Message, RichEmbed, Snowflake } from 'discord.js';
 import { ParsedArgs } from 'minimist';
+import { perms } from './PermissionManager';
 
 
 function replaceAll(str: string, mapObj: { [key: string]: string }){
@@ -16,16 +17,28 @@ function replaceAll(str: string, mapObj: { [key: string]: string }){
     });
 }
 
+@perms([
+    {name: "create", desc: "Create replies"},
+    {name: "delete", desc: "Delete replies"},
+    {name: "list", desc: "List replies"},
+])
 export class SimpleReply extends BotModule {
+    db_replies: LokiCollection<ReplyRecord>
+
+    initCollections() {
+        super.initCollections()
+
+        this.db_replies = this.db.addCollection<ReplyRecord>('replies')
+    }
+
 	onMessage(message: Message) {
-        this.db.find<ReplyRecord>({ type: "reply", guildID: message.guild.id }, (err, docs) => {
-            const value = docs.find((v: any) => {
-                return message.content.startsWith(v.command)
-            })
-            if(value !== undefined) {
-                message.channel.send(this.formatReply(message, value.content))
-            }
+        let docs = this.db_replies.findObjects({ guildID: message.guild.id })
+        const value = docs.find((v: any) => {
+            return message.content.startsWith(v.command)
         })
+        if (value !== undefined) {
+            message.channel.send(this.formatReply(message, value.content))
+        }
     }
 
     formatReply(message: Message, text: string): string {
@@ -55,37 +68,37 @@ export class SimpleReply extends BotModule {
         desc: "configure the SimpleReply utility"
     })
     cmd(message: Message, args: CommandParameters) {
-        const subCommand = args.consume()
+        const subCommand = args.pop()
         if(subCommand === "list") {
-            this.db.find<ReplyRecord>({ type: "reply", guildID: message.guild.id }, (err, docs) => {
-                const m = docs.map((v:any) => "`" + v.command + "`").join("\n")
-                message.channel.send({
-                    embed: new RichEmbed()
-                        .setTitle("All simple replies")
-                        .setDescription(m)
-                })
+            let docs = this.db_replies.findObjects({ guildID: message.guild.id })
+
+            const m = docs.map((v: any) => "`" + v.command + "`").join("\n")
+            message.channel.send({
+                embed: new RichEmbed()
+                    .setTitle("All simple replies")
+                    .setDescription(m)
             })
         }
         if(subCommand === "rm") {
-            const trigger = args.consume()
-            this.db.remove({ type: "reply", guildID: message.guild.id, command: trigger}, (err, n) => {
-                if(n === 0) {
-                    message.channel.send({
-                        embed: new RichEmbed()
-                            .setTitle("No simple replies found")
-                            .setDescription("Tried trigger phrase `" + trigger + "`\n" + "Maybe try surrounding the trigger phrase in quotes")
-                    })
-                } else {
-                    message.channel.send({
-                        embed: new RichEmbed()
-                            .setTitle(`Deleted ${n} simple replies`)
-                            .setDescription(n + " matches found and deleted for trigger phrase `" + trigger + "`")
-                    })
-                }
-            })
+            const trigger = args.pop()
+            let docs = this.db_replies.findObjects({ guildID: message.guild.id, command: trigger })
+            docs.forEach(v => this.db_replies.remove(v))
+            if (docs.length === 0) {
+                message.channel.send({
+                    embed: new RichEmbed()
+                        .setTitle("No simple replies found")
+                        .setDescription("Tried trigger phrase `" + trigger + "`\n" + "Maybe try surrounding the trigger phrase in quotes")
+                })
+            } else {
+                message.channel.send({
+                    embed: new RichEmbed()
+                        .setTitle(`Deleted simple reply`)
+                        .setDescription("Found and deleted all replies for for trigger phrase `" + trigger + "`")
+                })
+            }
         }
         if(subCommand === "create") {
-            const command = args.consume()
+            const command = args.pop()
             message.channel.fetchMessages({limit: 2}).then(collection => {
                 const content = collection.last().content
 
@@ -96,14 +109,13 @@ export class SimpleReply extends BotModule {
                         .setDescription(content)
                 })
 
-                this.db.insert({ type: "reply", guildID: message.guild.id, command: command, content: content })
+                this.db_replies.insert({ guildID: message.guild.id, command: command, content: content })
             })
         }
     }
 }
 
 type ReplyRecord = {
-    type: "reply",
     guildID: Snowflake,
     command: string, 
     content: string

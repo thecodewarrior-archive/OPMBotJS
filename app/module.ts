@@ -6,20 +6,25 @@ import * as minimist from "minimist";
 import * as fs from "fs";
 import * as path from "path";
 import * as tp from "typed-promisify";
-import Datastore = require("nedb");
+import * as loki from "lokijs";
+
 const mkdirp: any = require("mkdirp");
 
 export class BotModule {
 	protected client: Client;
 	protected readonly data: any;
 	protected readonly env: any;
-	protected db: Datastore;
+	protected readonly modules: { [key: string]: BotModule };
+	protected db: Loki;
+	protected db_messagedata: LokiCollection<MessageDataRecord>;
+	protected db_trackers: LokiCollection<TrackerRecord>;
 
 	readonly modulename: string;
 	readonly moduledir: string;
 
-	constructor(client: Client) {
+	constructor(client: Client, modules: { [key: string]: BotModule }) {
 		this.client = client;
+		this.modules = modules;
 
 		this.modulename = this.constructor.name;
 		this.moduledir = path.join(__dirname, "../module_data/data", this.modulename)
@@ -42,9 +47,15 @@ export class BotModule {
 		if (oldModule !== undefined && oldModule.db !== undefined) {
 			this.db = oldModule.db
 		} else {
-			let dbFile = path.join(__dirname, "../module_data/db", this.modulename)
-			this.db = new Datastore({ filename: dbFile, autoload: true })
+			let dbFile = path.join(__dirname, "../module_data/db", this.modulename + ".json")
+			this.db = new loki(dbFile)
 		}
+		this.initCollections()
+	}
+
+	initCollections() {
+		this.db_messagedata = this.db.addCollection<MessageDataRecord>('messageData')
+		this.db_trackers = this.db.addCollection<TrackerRecord>('trackers')
 	}
 
 	onChannelCreate(channel: Channel) {}
@@ -101,7 +112,6 @@ export class BotModule {
 			})
 		});
 	}
-
 
 	commands: CommandDefinition[]
 	commandsByName: Map<string, CommandDefinition>
@@ -234,30 +244,27 @@ export class BotModule {
 		return arr.map( message => {
 			return new Promise((res, rej) => {
 				let q = {
-					type: "messageData",
 					guildID: message.guild.id,
 					channelID: message.channel.id,
 					messageID: message.id,
 				}
-				this.db.findOne<MessageDataRecord>(q, (err, doc) => {
-					if (doc === null)
-						doc = {
-							type: "messageData",
-							guildID: message.guild.id,
-							channelID: message.channel.id,
-							messageID: message.id,
-							data: {}
-						}
-					let pre = JSON.stringify(doc.data)
-					process(doc.data, message).then((ret) => {
-						if (pre !== JSON.stringify(doc.data)) {
-							this.db.update(q, doc, { upsert: true }, () => {
-								res({ ret, message })
-							})
+				let documents = this.db_messagedata.findObjects(q)
+				let doc: MessageDataRecord = documents.length !== 0 ? documents[0] : {
+					guildID: message.guild.id, 
+					channelID: message.channel.id,
+					messageID: message.id,
+					data: {}
+				}
+				let pre = JSON.stringify(doc.data)
+				process(doc.data, message).then( ret => {
+					if (pre !== JSON.stringify(doc.data))  {
+						if(documents.length === 0) {
+							this.db_messagedata.insert(doc)
 						} else {
-							res({ ret, message })
+						 	this.db_messagedata.update(doc)
 						}
-					})
+					}
+					res({ ret, message })
 				})
 			})
 		})
@@ -279,8 +286,7 @@ export class BotModule {
 			if (_name === undefined) return
 
 			((this as any)[_name] as MessageTracker).init(message)
-			this.db.insert({
-				type: "tracker",
+			this.db_trackers.insert({
 				guildID: message.guild.id,
 				channelID: message.channel.id,
 				messageID: message.id,
@@ -303,18 +309,18 @@ export class BotModule {
 
 	getTrackers(message: Message): Promise<MessageTracker[]> {
 		return new Promise((resolve, reject) => {
-			this.db.find<TrackerRecord>({
-				type: "tracker",
+			let docs = this.db_trackers.findObjects({
 				guildID: message.guild.id,
 				channelID: message.channel.id,
 				messageID: message.id,
-			}, (err, docs) => {
-				resolve(docs.map((doc) => {
-					let _name = this.trackers.get(doc.tracker)
-					if (_name === undefined) return;
-					return (this as any)[_name]
-				}))
 			})
+
+
+			resolve(docs.map((doc) => {
+				let _name = this.trackers.get(doc.tracker)
+				if (_name === undefined) return;
+				return (this as any)[_name]
+			}))
 		})
 
 	}
@@ -355,19 +361,18 @@ export class BotModule {
 			value.forEach((value) => { value.onMessageUpdate(oldMessage, newMessage) })
 		})
 
-		this.db.find<TrackerRecord>({
-			type: "tracker",
+		let docs = this.db_trackers.findObjects({
 			guildID: oldMessage.guild.id,
 			channelID: oldMessage.channel.id,
 			messageID: oldMessage.id
-		}, (err, docs) => {
-			docs.forEach(v => {
-		v.guildID = newMessage.guild.id;
-		v.channelID = newMessage.channel.id;
-		v.messageID = newMessage.id;
+		})
 
-				this.db.insert(v)
-			})
+		docs.forEach(v => {
+			v.guildID = newMessage.guild.id;
+			v.channelID = newMessage.channel.id;
+			v.messageID = newMessage.id;
+
+			this.db_trackers.insert(v)
 		})
 
 		this.onMessageUpdate(oldMessage, newMessage)
@@ -402,6 +407,7 @@ export class MessageTracker {
 	}
 
 	addButtonReactions(message: Message) {
+		if (!message.channel.messages.exists("id", message.id)) return;
 		message.reactions.forEach( v => {
 			let button = this.buttons.get(v.emoji.name)
 			if(button === undefined) {
@@ -540,7 +546,6 @@ class MessageIdentifier {
 	}
 }
 type TrackerRecord = {
-	type: "tracker"
 	guildID: Snowflake
 	channelID: Snowflake
 	messageID: Snowflake
@@ -548,7 +553,6 @@ type TrackerRecord = {
 	tracker: string
 }
 type MessageDataRecord = {
-	type: "messageData"
 	guildID: Snowflake
 	channelID: Snowflake
 	messageID: Snowflake

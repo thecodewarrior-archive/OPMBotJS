@@ -1,4 +1,5 @@
 app/token.txt
+src/main/token.txt
 module_data/env/
 module_data/db/
 node_modules/

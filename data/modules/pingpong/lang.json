@@ -1,0 +1,23 @@
+{
+    "ping": "Pong",
+    "pong": "Ping",
+    "command": {
+        "pingpong": {
+            "help": {
+                "title": "ping",
+                "name": "ping - an example command",
+                "synopsis": "ping -h -a -bc -d 3 --foo=bar baz --bop=\"spaces and --stuff\"",
+                "description": "ping - an example command that I used to see if the bot would crash and burn",
+                "options": {
+                    "-h": "Displays this help page. Works for every command.",
+                    "-a": "A flag called `a`, can be checked with `context.args.flag('a')`",
+                    "-b, -c": "Two other meaningless flags, as you can see you can combine two flags when using a single dash",
+                    "-d": "This looks similar to a flag but in fact will have the value `3`. `-d3` would is identical",
+                    "--foo": "A named parameter with the value `bar`",
+                    "baz": "Positional argument 0",
+                    "--bop": "This argument is passed a string enclosed with quotes to segment it off"
+                }
+            }
+        }
+    }
+}

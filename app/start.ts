@@ -1,3 +1,5 @@
+global.Promise = require("bluebird")
+
 import * as fs from "fs";
 import * as path from "path";
 import * as discord from "discord.js";
@@ -321,13 +323,23 @@ const markerLine = "//module"
 function loadModule(file: string) {
 	console.log("Loading module `" + file + "`")
 	purgeCache(file)
-	let exports: any = require(file);
-	for (var k in exports) {
-		var botmodule = new exports[k](client);
+	let existing = modules[file];
+	delete modules[file]
+	try {
+		let exports: any = require(file);
+		for (var k in exports) {
+			let ctor = exports[k]
+			let proto = Object.getPrototypeOf(ctor)
+			let instance_of = proto === BotModule || proto instanceof BotModule
+			if (!instance_of) continue;
+			var botmodule = new ctor(client, modules);
 
-		let existing = modules[file];
-		modules[file] = botmodule;
-		botmodule.transfer(existing)
+			modules[file] = botmodule;
+			botmodule.transfer(existing)
+		}
+	} catch(err) {
+		console.log("Error loading module " + file + ", existing module unloaded.")
+		console.log(err)
 	}
 }
 

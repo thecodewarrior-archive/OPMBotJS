@@ -4,13 +4,6 @@ import { simpleTrackerPage } from './simple_trackers';
 
 
 export class BaseModule extends BotModule {
-    modules: { [key: string]: BotModule }
-
-    constructor(client: Client, modules: {[key: string]: BotModule}) {
-        super(client)
-        this.modules = modules
-    }
-
     @command({
         names: ["help"],
         flags: [],

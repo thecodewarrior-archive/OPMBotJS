@@ -6,8 +6,8 @@ import { ParsedArgs } from 'minimist';
 export class LawsOfAviation extends BotModule {
     lawPages: string[] = []
 
-    constructor(client: Client) {
-        super(client)
+    constructor(client: Client, modules: { [key: string]: BotModule }) {
+        super(client, modules)
         this.fileContent("laws.txt").then( (text) => {
             let sections = text.split("\n\n")
             let current = ""
